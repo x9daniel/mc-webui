@@ -11,6 +11,7 @@ let currentChannelIdx = 0;  // Current active channel (0 = Public)
 let availableChannels = [];  // List of channels from API
 let lastSeenTimestamps = {};  // Track last seen message timestamp per channel
 let unreadCounts = {};  // Track unread message counts per channel
+let mutedChannels = new Set();  // Channel indices with muted notifications
 
 // DM state (for badge updates on main page)
 let dmLastSeenTimestamps = {};  // Track last seen DM timestamp per conversation
@@ -1354,8 +1355,13 @@ let previousPendingCount = 0;
  * Check if we should send notification based on count changes
  */
 function checkAndNotify() {
-    // Calculate current totals
-    const currentTotalUnread = Object.values(unreadCounts).reduce((sum, count) => sum + count, 0);
+    // Calculate current totals (exclude muted channels)
+    let currentTotalUnread = 0;
+    for (const [idx, count] of Object.entries(unreadCounts)) {
+        if (!mutedChannels.has(parseInt(idx))) {
+            currentTotalUnread += count;
+        }
+    }
 
     // Get DM unread count from badge
     const dmBadge = document.querySelector('.fab-badge-dm');
@@ -1395,8 +1401,13 @@ function updateAppBadge() {
         return;
     }
 
-    // Calculate total unread
-    const channelUnread = Object.values(unreadCounts).reduce((sum, count) => sum + count, 0);
+    // Calculate total unread (exclude muted channels)
+    let channelUnread = 0;
+    for (const [idx, count] of Object.entries(unreadCounts)) {
+        if (!mutedChannels.has(parseInt(idx))) {
+            channelUnread += count;
+        }
+    }
 
     const dmBadge = document.querySelector('.fab-badge-dm');
     const dmUnread = dmBadge ? parseInt(dmBadge.textContent) || 0 : 0;
@@ -1865,7 +1876,11 @@ async function loadLastSeenTimestampsFromServer() {
             for (const [key, value] of Object.entries(data.channels)) {
                 lastSeenTimestamps[parseInt(key)] = value;
             }
-            console.log('Loaded channel read status from server:', lastSeenTimestamps);
+            // Load muted channels
+            if (data.muted_channels) {
+                mutedChannels = new Set(data.muted_channels);
+            }
+            console.log('Loaded channel read status from server:', lastSeenTimestamps, 'muted:', [...mutedChannels]);
         } else {
             console.warn('Failed to load read status from server, using empty state');
             lastSeenTimestamps = {};
@@ -1914,6 +1929,51 @@ async function markChannelAsRead(channelIdx, timestamp) {
 }
 
 /**
+ * Mark all channels as read (bell icon click)
+ */
+async function markAllChannelsRead() {
+    // Build list of channels with unread messages
+    const unreadChannels = [];
+    for (const [idx, count] of Object.entries(unreadCounts)) {
+        if (count > 0) {
+            const channel = availableChannels.find(ch => ch.index === parseInt(idx));
+            const name = channel ? channel.name : `Channel ${idx}`;
+            unreadChannels.push({ idx, count, name });
+        }
+    }
+
+    if (unreadChannels.length === 0) return;
+
+    // Show confirmation dialog with list of unread channels
+    const channelList = unreadChannels.map(ch => `  - ${ch.name} (${ch.count})`).join('\n');
+    if (!confirm(`Mark all messages as read?\n\nUnread channels:\n${channelList}`)) return;
+
+    // Collect latest timestamps
+    const now = Math.floor(Date.now() / 1000);
+    const timestamps = {};
+
+    for (const { idx } of unreadChannels) {
+        timestamps[idx] = now;
+        lastSeenTimestamps[parseInt(idx)] = now;
+        unreadCounts[idx] = 0;
+    }
+
+    // Update UI immediately
+    updateUnreadBadges();
+
+    // Save to server
+    try {
+        await fetch('/api/read_status/mark_all_read', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ channels: timestamps })
+        });
+    } catch (error) {
+        console.error('Error marking all as read:', error);
+    }
+}
+
+/**
  * Check for new messages across all channels
  */
 async function checkForUpdates() {
@@ -1948,6 +2008,11 @@ async function checkForUpdates() {
             data.channels.forEach(channel => {
                 unreadCounts[channel.index] = channel.unread_count;
             });
+
+            // Sync muted channels from server
+            if (data.muted_channels) {
+                mutedChannels = new Set(data.muted_channels);
+            }
 
             // Update UI badges
             updateUnreadBadges();
@@ -1985,8 +2050,8 @@ function updateUnreadBadges() {
             // Get base channel name (remove existing badge if any)
             let channelName = option.textContent.replace(/\s*\(\d+\)$/, '');
 
-            // Add badge if there are unread messages and it's not the current channel
-            if (unreadCount > 0 && channelIdx !== currentChannelIdx) {
+            // Add badge if there are unread messages, not current channel, and not muted
+            if (unreadCount > 0 && channelIdx !== currentChannelIdx && !mutedChannels.has(channelIdx)) {
                 option.textContent = `${channelName} (${unreadCount})`;
             } else {
                 option.textContent = channelName;
@@ -1994,8 +2059,13 @@ function updateUnreadBadges() {
         });
     }
 
-    // Update notification bell
-    const totalUnread = Object.values(unreadCounts).reduce((sum, count) => sum + count, 0);
+    // Update notification bell (exclude muted channels)
+    let totalUnread = 0;
+    for (const [idx, count] of Object.entries(unreadCounts)) {
+        if (!mutedChannels.has(parseInt(idx))) {
+            totalUnread += count;
+        }
+    }
     updateNotificationBell(totalUnread);
 
     // Update app icon badge
@@ -2265,13 +2335,17 @@ function displayChannelsList(channels) {
 
         const isPublic = channel.index === 0;
 
+        const isMuted = mutedChannels.has(channel.index);
         item.innerHTML = `
             <div>
                 <strong>${escapeHtml(channel.name)}</strong>
-                <br>
-                <small class="text-muted font-monospace">${channel.key}</small>
             </div>
             <div class="btn-group btn-group-sm">
+                <button class="btn ${isMuted ? 'btn-secondary' : 'btn-outline-secondary'}"
+                        onclick="toggleChannelMute(${channel.index})"
+                        title="${isMuted ? 'Unmute notifications' : 'Mute notifications'}">
+                    <i class="bi ${isMuted ? 'bi-bell-slash' : 'bi-bell'}"></i>
+                </button>
                 <button class="btn btn-outline-primary" onclick="shareChannel(${channel.index})" title="Share">
                     <i class="bi bi-share"></i>
                 </button>
@@ -2285,6 +2359,37 @@ function displayChannelsList(channels) {
 
         listEl.appendChild(item);
     });
+}
+
+/**
+ * Toggle mute state for a channel
+ */
+async function toggleChannelMute(index) {
+    const newMuted = !mutedChannels.has(index);
+
+    try {
+        const response = await fetch(`/api/channels/${index}/mute`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ muted: newMuted })
+        });
+        const data = await response.json();
+
+        if (data.success) {
+            if (newMuted) {
+                mutedChannels.add(index);
+            } else {
+                mutedChannels.delete(index);
+            }
+            // Refresh modal list and badges
+            loadChannelsList();
+            updateUnreadBadges();
+        } else {
+            showNotification('Failed to update mute state', 'danger');
+        }
+    } catch (error) {
+        showNotification('Failed to update mute state', 'danger');
+    }
 }
 
 /**

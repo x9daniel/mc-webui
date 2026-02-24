@@ -1541,6 +1541,10 @@ def get_messages_updates():
             if ts > last_seen_ts:
                 channel_stats[ch_idx]['unread_count'] += 1
 
+        # Get muted channels to exclude from total
+        from app import read_status as rs
+        muted_channels = set(rs.get_muted_channels())
+
         # Build response
         updates = []
         total_unread = 0
@@ -1552,7 +1556,10 @@ def get_messages_updates():
             last_seen_ts = last_seen.get(channel_idx, 0)
             has_updates = stats['latest_timestamp'] > last_seen_ts
             unread_count = stats['unread_count'] if has_updates else 0
-            total_unread += unread_count
+
+            # Only count unmuted channels toward total
+            if channel_idx not in muted_channels:
+                total_unread += unread_count
 
             updates.append({
                 'index': channel_idx,
@@ -1565,7 +1572,8 @@ def get_messages_updates():
         return jsonify({
             'success': True,
             'channels': updates,
-            'total_unread': total_unread
+            'total_unread': total_unread,
+            'muted_channels': list(muted_channels)
         }), 200
 
     except Exception as e:
@@ -2569,7 +2577,8 @@ def get_read_status_api():
         return jsonify({
             'success': True,
             'channels': status['channels'],
-            'dm': status['dm']
+            'dm': status['dm'],
+            'muted_channels': status.get('muted_channels', [])
         }), 200
 
     except Exception as e:
@@ -2578,7 +2587,8 @@ def get_read_status_api():
             'success': False,
             'error': str(e),
             'channels': {},
-            'dm': {}
+            'dm': {},
+            'muted_channels': []
         }), 500
 
 
@@ -2943,6 +2953,65 @@ def mark_read_api():
             'success': False,
             'error': str(e)
         }), 500
+
+
+@api_bp.route('/read_status/mark_all_read', methods=['POST'])
+def mark_all_read_api():
+    """Mark all channels as read in bulk."""
+    try:
+        from app import read_status
+
+        data = request.get_json()
+        if not data or 'channels' not in data:
+            return jsonify({'success': False, 'error': 'Missing channels timestamps'}), 400
+
+        success = read_status.mark_all_channels_read(data['channels'])
+
+        if success:
+            return jsonify({'success': True, 'message': 'All channels marked as read'}), 200
+        else:
+            return jsonify({'success': False, 'error': 'Failed to save'}), 500
+
+    except Exception as e:
+        logger.error(f"Error marking all as read: {e}")
+        return jsonify({'success': False, 'error': str(e)}), 500
+
+
+@api_bp.route('/channels/muted', methods=['GET'])
+def get_muted_channels_api():
+    """Get list of muted channel indices."""
+    try:
+        from app import read_status
+        muted = read_status.get_muted_channels()
+        return jsonify({'success': True, 'muted_channels': muted}), 200
+    except Exception as e:
+        logger.error(f"Error getting muted channels: {e}")
+        return jsonify({'success': False, 'error': str(e)}), 500
+
+
+@api_bp.route('/channels/<int:index>/mute', methods=['POST'])
+def set_channel_muted_api(index):
+    """Set mute state for a channel."""
+    try:
+        from app import read_status
+
+        data = request.get_json()
+        if data is None or 'muted' not in data:
+            return jsonify({'success': False, 'error': 'Missing muted field'}), 400
+
+        success = read_status.set_channel_muted(index, data['muted'])
+
+        if success:
+            return jsonify({
+                'success': True,
+                'message': f'Channel {index} {"muted" if data["muted"] else "unmuted"}'
+            }), 200
+        else:
+            return jsonify({'success': False, 'error': 'Failed to save'}), 500
+
+    except Exception as e:
+        logger.error(f"Error setting channel mute: {e}")
+        return jsonify({'success': False, 'error': str(e)}), 500
 
 
 # ============================================================

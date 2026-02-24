@@ -38,7 +38,7 @@
                 {% endif %}
             </span>
             <div class="d-flex align-items-center gap-2">
-                <div id="notificationBell" class="btn btn-outline-light btn-sm position-relative" style="cursor: default;" title="Unread messages">
+                <div id="notificationBell" class="btn btn-outline-light btn-sm position-relative" style="cursor: pointer;" onclick="markAllChannelsRead()" title="Mark all as read">
                     <i class="bi bi-bell"></i>
                 </div>
                 <select id="channelSelector" class="form-select form-select-sm" style="width: auto; min-width: 100px;" title="Select channel">

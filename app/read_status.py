@@ -24,8 +24,9 @@ READ_STATUS_FILE = Path(config.MC_CONFIG_DIR) / '.read_status.json'
 def _get_default_status():
     """Get default read status structure"""
     return {
-        'channels': {},  # {"0": timestamp, "1": timestamp, ...}
-        'dm': {}         # {"name_User1": timestamp, "pk_abc123": timestamp, ...}
+        'channels': {},          # {"0": timestamp, "1": timestamp, ...}
+        'dm': {},                # {"name_User1": timestamp, "pk_abc123": timestamp, ...}
+        'muted_channels': []     # [2, 5, 7] - channel indices with muted notifications
     }
 
 
@@ -50,11 +51,13 @@ def load_read_status():
                 logger.warning("Invalid read status structure, resetting")
                 return _get_default_status()
 
-            # Ensure both keys exist
+            # Ensure all keys exist
             if 'channels' not in status:
                 status['channels'] = {}
             if 'dm' not in status:
                 status['dm'] = {}
+            if 'muted_channels' not in status:
+                status['muted_channels'] = []
 
             logger.debug(f"Loaded read status: {len(status['channels'])} channels, {len(status['dm'])} DM conversations")
             return status
@@ -196,3 +199,78 @@ def get_dm_last_seen(conversation_id):
     except Exception as e:
         logger.error(f"Error getting last seen for DM {conversation_id}: {e}")
         return 0
+
+
+def get_muted_channels():
+    """
+    Get list of muted channel indices.
+
+    Returns:
+        list: List of muted channel indices (integers)
+    """
+    try:
+        status = load_read_status()
+        return status.get('muted_channels', [])
+    except Exception as e:
+        logger.error(f"Error getting muted channels: {e}")
+        return []
+
+
+def set_channel_muted(channel_idx, muted):
+    """
+    Set mute state for a channel.
+
+    Args:
+        channel_idx (int): Channel index
+        muted (bool): True to mute, False to unmute
+
+    Returns:
+        bool: True if successful
+    """
+    try:
+        status = load_read_status()
+        muted_list = status.get('muted_channels', [])
+        channel_idx = int(channel_idx)
+
+        if muted and channel_idx not in muted_list:
+            muted_list.append(channel_idx)
+        elif not muted and channel_idx in muted_list:
+            muted_list.remove(channel_idx)
+
+        status['muted_channels'] = muted_list
+        success = save_read_status(status)
+
+        if success:
+            logger.info(f"Channel {channel_idx} {'muted' if muted else 'unmuted'}")
+        return success
+
+    except Exception as e:
+        logger.error(f"Error setting mute for channel {channel_idx}: {e}")
+        return False
+
+
+def mark_all_channels_read(channel_timestamps):
+    """
+    Mark all channels as read in bulk.
+
+    Args:
+        channel_timestamps (dict): {"0": timestamp, "1": timestamp, ...}
+
+    Returns:
+        bool: True if successful
+    """
+    try:
+        status = load_read_status()
+
+        for channel_key, timestamp in channel_timestamps.items():
+            status['channels'][str(channel_key)] = int(timestamp)
+
+        success = save_read_status(status)
+
+        if success:
+            logger.info(f"Marked {len(channel_timestamps)} channels as read")
+        return success
+
+    except Exception as e:
+        logger.error(f"Error marking all channels as read: {e}")
+        return False
