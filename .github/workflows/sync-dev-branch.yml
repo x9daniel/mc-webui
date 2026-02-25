@@ -1,0 +1,26 @@
+name: Sync dev branch from upstream
+
+on:
+  workflow_dispatch: # Manual trigger
+
+jobs:
+  sync-dev:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          token: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Fetch upstream dev branch
+        run: |
+          git remote add upstream https://github.com/MarekWo/mc-webui.git
+          git fetch upstream dev
+
+      - name: Push dev branch to origin
+        run: |
+          git push origin upstream/dev:refs/heads/dev
