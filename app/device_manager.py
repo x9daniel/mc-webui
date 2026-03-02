@@ -49,6 +49,8 @@ class DeviceManager:
         self._self_info = None
         self._subscriptions = []    # active event subscriptions
         self._channel_secrets = {}  # {channel_idx: secret_hex} for pkt_payload
+        self._pending_echo = None   # {'timestamp': float, 'channel_idx': int, 'msg_id': int, 'pkt_payload': str|None}
+        self._echo_lock = threading.Lock()
 
     @property
     def is_connected(self) -> bool:
@@ -219,6 +221,7 @@ class DeviceManager:
             (EventType.ADVERTISEMENT, self._on_advertisement),
             (EventType.PATH_UPDATE, self._on_path_update),
             (EventType.NEW_CONTACT, self._on_new_contact),
+            (EventType.RX_LOG_DATA, self._on_rx_log_data),
             (EventType.DISCONNECTED, self._on_disconnected),
         ]
 
@@ -505,6 +508,96 @@ class DeviceManager:
         except Exception as e:
             logger.error(f"Error handling path update: {e}")
 
+    async def _on_rx_log_data(self, event):
+        """Handle RX_LOG_DATA — RF log containing echoed/repeated packets.
+
+        Firmware sends LOG_DATA (0x88) packets for every repeated radio frame.
+        Payload format: header(1) [transport_code(4)] path_len(1) path(N) pkt_payload(rest)
+        We only process GRP_TXT (payload_type=0x05) for channel message echoes.
+        """
+        try:
+            import io
+            data = getattr(event, 'payload', {})
+            payload_hex = data.get('payload', '')
+            if not payload_hex:
+                return
+
+            pkt = bytes.fromhex(payload_hex)
+            pbuf = io.BytesIO(pkt)
+
+            header = pbuf.read(1)[0]
+            route_type = header & 0x03
+            payload_type = (header & 0x3C) >> 2
+
+            # Skip transport code for route_type 0 (flood) and 3
+            if route_type == 0x00 or route_type == 0x03:
+                pbuf.read(4)  # discard transport code
+
+            path_len = pbuf.read(1)[0]
+            path = pbuf.read(path_len).hex()
+            pkt_payload = pbuf.read().hex()
+
+            # Only process GRP_TXT channel message echoes
+            if payload_type != 0x05:
+                return
+
+            if not pkt_payload:
+                return
+
+            snr = data.get('snr')
+            self._process_echo(pkt_payload, path, snr)
+
+        except Exception as e:
+            logger.error(f"Error handling RX_LOG_DATA: {e}")
+
+    def _process_echo(self, pkt_payload: str, path: str, snr: float = None):
+        """Classify and store an echo: sent echo or incoming echo.
+
+        For sent messages: correlate with pending echo to get pkt_payload.
+        For incoming: store as echo keyed by pkt_payload for route display.
+        """
+        with self._echo_lock:
+            current_time = time.time()
+            direction = 'incoming'
+
+            # Check if this matches a pending sent message
+            if self._pending_echo:
+                pe = self._pending_echo
+                age = current_time - pe['timestamp']
+
+                # Expire stale pending echo
+                if age > 60:
+                    self._pending_echo = None
+                elif pe['pkt_payload'] is None:
+                    # First echo after send — correlate pkt_payload with sent message
+                    pe['pkt_payload'] = pkt_payload
+                    direction = 'sent'
+                    # Update the sent message's pkt_payload in DB
+                    self.db.update_message_pkt_payload(pe['msg_id'], pkt_payload)
+                    logger.info(f"Echo: correlated pkt_payload with sent msg #{pe['msg_id']}, path={path}")
+                elif pe['pkt_payload'] == pkt_payload:
+                    # Additional echo for same sent message
+                    direction = 'sent'
+
+            # Store echo in DB
+            self.db.insert_echo(
+                pkt_payload=pkt_payload,
+                path=path,
+                snr=snr,
+                direction=direction,
+            )
+
+            logger.debug(f"Echo ({direction}): path={path} snr={snr} pkt={pkt_payload[:16]}...")
+
+            # Emit SocketIO event for real-time UI update
+            if self.socketio:
+                self.socketio.emit('echo', {
+                    'pkt_payload': pkt_payload,
+                    'path': path,
+                    'snr': snr,
+                    'direction': direction,
+                }, namespace='/chat')
+
     def _is_manual_approval_enabled(self) -> bool:
         """Check if manual contact approval is enabled (from persisted settings)."""
         try:
@@ -597,6 +690,16 @@ class DeviceManager:
                 is_own=True,
                 pkt_payload=getattr(event, 'data', {}).get('pkt_payload') if event else None,
             )
+
+            # Register for echo correlation — first RX_LOG_DATA echo will
+            # provide the actual pkt_payload for this sent message
+            with self._echo_lock:
+                self._pending_echo = {
+                    'timestamp': time.time(),
+                    'channel_idx': channel_idx,
+                    'msg_id': msg_id,
+                    'pkt_payload': None,
+                }
 
             return {'success': True, 'message': 'Message sent', 'id': msg_id}
 

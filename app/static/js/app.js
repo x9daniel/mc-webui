@@ -766,6 +766,14 @@ function createMessageElement(msg) {
 
     const time = formatTime(msg.timestamp);
 
+    // Build paths from echo data if not already present
+    if (!msg.paths && msg.echo_paths && msg.echo_paths.length > 0) {
+        msg.paths = msg.echo_paths.map((p, i) => ({
+            path: p,
+            snr: msg.echo_snrs ? msg.echo_snrs[i] : null,
+        }));
+    }
+
     let metaInfo = '';
     if (msg.snr !== undefined && msg.snr !== null) {
         metaInfo += `SNR: ${msg.snr.toFixed(1)} dB`;

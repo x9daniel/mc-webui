@@ -379,6 +379,14 @@ class Database:
             ).fetchall()
             return [dict(r) for r in rows]
 
+    def update_message_pkt_payload(self, msg_id: int, pkt_payload: str) -> None:
+        """Set pkt_payload on a channel message (used for sent message echo correlation)."""
+        with self._connect() as conn:
+            conn.execute(
+                "UPDATE channel_messages SET pkt_payload = ? WHERE id = ?",
+                (pkt_payload, msg_id)
+            )
+
     # ================================================================
     # Paths
     # ================================================================

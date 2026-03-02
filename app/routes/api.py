@@ -476,10 +476,11 @@ def get_messages():
                 # Enrich with echo data and analyzer URL
                 if pkt_payload:
                     msg['analyzer_url'] = compute_analyzer_url(pkt_payload)
-                    if msg['is_own']:
-                        echoes = db.get_echoes_for_message(pkt_payload)
+                    echoes = db.get_echoes_for_message(pkt_payload)
+                    if echoes:
                         msg['echo_count'] = len(echoes)
-                        msg['echo_paths'] = [e.get('path', '') for e in echoes]
+                        msg['echo_paths'] = [e.get('path', '') for e in echoes if e.get('path')]
+                        msg['echo_snrs'] = [e.get('snr') for e in echoes if e.get('snr') is not None]
 
                 messages.append(msg)
         else:
