@@ -492,30 +492,62 @@ class DeviceManager:
         except Exception as e:
             logger.error(f"Error handling path update: {e}")
 
+    def _is_manual_approval_enabled(self) -> bool:
+        """Check if manual contact approval is enabled (from persisted settings)."""
+        try:
+            from pathlib import Path
+            settings_path = Path(self.config.MC_CONFIG_DIR) / ".webui_settings.json"
+            if settings_path.exists():
+                with open(settings_path, 'r', encoding='utf-8') as f:
+                    settings = json.load(f)
+                    return bool(settings.get('manual_add_contacts', False))
+        except Exception:
+            pass
+        return False
+
     async def _on_new_contact(self, event):
-        """Handle new contact discovered."""
+        """Handle new contact discovered.
+
+        When manual approval is enabled, contacts go to pending list only.
+        When manual approval is off, contacts are auto-added to DB.
+        """
         try:
             data = getattr(event, 'payload', {})
             pubkey = data.get('public_key', '')
             name = data.get('adv_name', data.get('name', ''))
 
-            if pubkey:
-                last_adv = data.get('last_advert')
-                last_advert_val = (
-                    str(int(last_adv))
-                    if last_adv and isinstance(last_adv, (int, float)) and last_adv > 0
-                    else str(int(time.time()))
-                )
-                self.db.upsert_contact(
-                    public_key=pubkey,
-                    name=name,
-                    type=data.get('type', data.get('adv_type', 0)),
-                    adv_lat=data.get('adv_lat'),
-                    adv_lon=data.get('adv_lon'),
-                    last_advert=last_advert_val,
-                    source='device',
-                )
-                logger.info(f"New contact: {name} ({pubkey[:8]}...)")
+            if not pubkey:
+                return
+
+            if self._is_manual_approval_enabled():
+                # Manual mode: don't add to DB, just notify frontend
+                # meshcore library already puts it in mc.pending_contacts
+                logger.info(f"Pending contact (manual mode): {name} ({pubkey[:8]}...)")
+                if self.socketio:
+                    self.socketio.emit('pending_contact', {
+                        'public_key': pubkey,
+                        'name': name,
+                        'type': data.get('type', data.get('adv_type', 0)),
+                    }, namespace='/chat')
+                return
+
+            # Auto mode: add to DB immediately
+            last_adv = data.get('last_advert')
+            last_advert_val = (
+                str(int(last_adv))
+                if last_adv and isinstance(last_adv, (int, float)) and last_adv > 0
+                else str(int(time.time()))
+            )
+            self.db.upsert_contact(
+                public_key=pubkey,
+                name=name,
+                type=data.get('type', data.get('adv_type', 0)),
+                adv_lat=data.get('adv_lat'),
+                adv_lon=data.get('adv_lon'),
+                last_advert=last_advert_val,
+                source='device',
+            )
+            logger.info(f"New contact (auto-add): {name} ({pubkey[:8]}...)")
 
         except Exception as e:
             logger.error(f"Error handling new contact: {e}")
@@ -756,7 +788,9 @@ class DeviceManager:
                 {
                     'public_key': pk,
                     'name': c.get('adv_name', c.get('name', '')),
-                    'type': c.get('adv_type', 0),
+                    'type': c.get('type', c.get('adv_type', 0)),
+                    'adv_lat': c.get('adv_lat'),
+                    'adv_lon': c.get('adv_lon'),
                 }
                 for pk, c in pending.items()
             ]
@@ -775,9 +809,19 @@ class DeviceManager:
                 return {'success': False, 'error': 'Contact not in pending list'}
 
             self.execute(self.mc.commands.add_contact(contact))
+            last_adv = contact.get('last_advert')
+            last_advert_val = (
+                str(int(last_adv))
+                if last_adv and isinstance(last_adv, (int, float)) and last_adv > 0
+                else str(int(time.time()))
+            )
             self.db.upsert_contact(
                 public_key=pubkey,
-                name=contact.get('adv_name', ''),
+                name=contact.get('adv_name', contact.get('name', '')),
+                type=contact.get('type', contact.get('adv_type', 0)),
+                adv_lat=contact.get('adv_lat'),
+                adv_lon=contact.get('adv_lon'),
+                last_advert=last_advert_val,
                 source='device',
             )
             return {'success': True, 'message': 'Contact approved'}
