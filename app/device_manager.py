@@ -172,7 +172,10 @@ class DeviceManager:
             await self._subscribe_events()
 
             # Enable auto-refresh of contacts on adverts/path updates
-            self.mc.auto_update_contacts = True
+            # Keep auto_update_contacts OFF to avoid serial blocking on every
+            # ADVERTISEMENT event (324 contacts = several seconds of serial I/O).
+            # We sync contacts at startup and handle NEW_CONTACT events individually.
+            self.mc.auto_update_contacts = False
 
             # Fetch initial contacts from device
             await self.mc.ensure_contacts()
