@@ -319,15 +319,21 @@ def handle_unhealthy_container(container_name: str, status: dict):
         log(f"Failed to save diagnostic info: {e}", 'ERROR')
 
     # v2: mc-webui owns the device connection directly — USB reset if repeated failures
+    restart_success = False
     if container_name == 'mc-webui':
         recent_restarts = count_recent_restarts(container_name, minutes=8)
         if recent_restarts >= 3:
             log(f"{container_name} has been restarted {recent_restarts} times in the last 8 minutes. Attempting hardware USB reset.", "WARN")
+            # Stop the container first so it releases the serial port
+            run_compose_command(['stop', container_name])
             if reset_usb_device():
-                time.sleep(2)  # Give OS time to re-enumerate the device before Docker brings it back
-
-    # Restart the container
-    restart_success = restart_container(container_name)
+                time.sleep(5)  # Give OS time to re-enumerate the device
+            restart_success = start_container(container_name)
+        else:
+            restart_success = restart_container(container_name)
+    else:
+        # Restart the container
+        restart_success = restart_container(container_name)
 
     # Record in history
     restart_history.append({
@@ -389,15 +395,21 @@ def handle_unresponsive_device(container_name: str, status: dict):
         log(f"Failed to save diagnostic info: {e}", 'ERROR')
 
     # v2: mc-webui owns the device connection directly — USB reset if repeated failures
+    restart_success = False
     if container_name == 'mc-webui':
         recent_restarts = count_recent_restarts(container_name, minutes=8)
         if recent_restarts >= 3:
             log(f"{container_name} has been restarted {recent_restarts} times in the last 8 minutes. Attempting hardware USB reset.", "WARN")
+            # Stop the container first so it releases the serial port
+            run_compose_command(['stop', container_name])
             if reset_usb_device():
-                time.sleep(2)  # Give OS time to re-enumerate the device before Docker brings it back
-
-    # Restart the container
-    restart_success = restart_container(container_name)
+                time.sleep(5)  # Give OS time to re-enumerate the device
+            restart_success = start_container(container_name)
+        else:
+            restart_success = restart_container(container_name)
+    else:
+        # Restart the container
+        restart_success = restart_container(container_name)
 
     # Record in history
     restart_history.append({
