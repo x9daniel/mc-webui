@@ -174,22 +174,70 @@ def reset_esp32_device():
 
 def reset_usb_device():
     """Perform a hardware USB bus reset on the LoRa device."""
+    # First get the sysfs path if possible
+    real_tty = auto_detect_serial_port()
+    usb_sysfs_dir = None
+    usb_device_id = None
+    if real_tty:
+        try:
+            tty_name = os.path.basename(real_tty)
+            sysfs_path = f"/sys/class/tty/{tty_name}/device"
+            if os.path.exists(sysfs_path):
+                usb_intf_dir = os.path.realpath(sysfs_path)
+                usb_sysfs_dir = os.path.dirname(usb_intf_dir)
+                usb_device_id = os.path.basename(usb_sysfs_dir)
+        except Exception as e:
+            log(f"Error finding sysfs path: {e}", "WARN")
+
+    if usb_sysfs_dir:
+        # 1. Try toggling authorized flag
+        authorized_path = os.path.join(usb_sysfs_dir, "authorized")
+        if os.path.exists(authorized_path):
+            log(f"Toggling USB authorized flag on {usb_sysfs_dir}", "WARN")
+            try:
+                with open(authorized_path, 'w') as f:
+                    f.write("0")
+                time.sleep(2)
+                with open(authorized_path, 'w') as f:
+                    f.write("1")
+                log("USB authorized toggle successful", "INFO")
+                time.sleep(2)
+            except Exception as e:
+                log(f"USB authorized toggle failed: {e}", "ERROR")
+
+        # 2. Try unbind/bind from usb driver
+        unbind_path = "/sys/bus/usb/drivers/usb/unbind"
+        bind_path = "/sys/bus/usb/drivers/usb/bind"
+        if os.path.exists(unbind_path) and usb_device_id:
+            log(f"Unbinding USB device {usb_device_id} from usb driver", "WARN")
+            try:
+                with open(unbind_path, 'w') as f:
+                    f.write(usb_device_id)
+                time.sleep(2)
+                with open(bind_path, 'w') as f:
+                    f.write(usb_device_id)
+                log("USB unbind/bind successful", "INFO")
+                time.sleep(2)
+            except Exception as e:
+                log(f"USB unbind/bind failed: {e}", "ERROR")
+
+    # 3. Fallback to ioctl USBDEVFS_RESET
     device_path = os.environ.get('USB_DEVICE_PATH')
     if not device_path:
         device_path = auto_detect_usb_device()
 
     if not device_path:
-        log("Cannot perform USB reset: device path could not be determined", "WARN")
+        log("Cannot perform USB ioctl reset: device path could not be determined", "WARN")
         return False
 
-    log(f"Performing hardware USB bus reset on {device_path}", "WARN")
+    log(f"Performing hardware USB bus reset via ioctl on {device_path}", "WARN")
     try:
         with open(device_path, 'w') as fd:
             fcntl.ioctl(fd, USBDEVFS_RESET, 0)
-        log("USB bus reset successful", "INFO")
+        log("USB ioctl bus reset successful", "INFO")
         return True
     except Exception as e:
-        log(f"USB reset failed: {e}", "ERROR")
+        log(f"USB ioctl reset failed: {e}", "ERROR")
         return False
 
 def count_recent_restarts(container_name: str, minutes: int = 8) -> int:
