@@ -178,6 +178,16 @@ class DeviceManager:
             except Exception as e:
                 logger.warning(f"Could not fetch device_info: {e}")
 
+            # Workaround: meshcore lib 2.2.21 has a bug where list.extend()
+            # return value (None) corrupts reader.channels for idx >= 20.
+            # Pre-allocate the channels list to max_channels to avoid this.
+            reader = getattr(self.mc, '_reader', None)
+            if reader and hasattr(reader, 'channels'):
+                current = reader.channels or []
+                if len(current) < self._max_channels:
+                    reader.channels = current + [{} for _ in range(self._max_channels - len(current))]
+                    logger.debug(f"Pre-allocated reader.channels to {len(reader.channels)} slots")
+
             logger.info(f"Connected to device: {self._device_name} "
                         f"(key: {self._self_info.get('public_key', '?')[:8]}...)")
 
