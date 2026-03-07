@@ -7,6 +7,7 @@ Synchronous wrapper with WAL mode. Thread-safe via connection-per-call pattern.
 import sqlite3
 import shutil
 import logging
+import time
 from pathlib import Path
 from contextlib import contextmanager
 from datetime import datetime, timedelta
@@ -353,6 +354,43 @@ class Database:
                 "SELECT * FROM acks WHERE expected_ack = ? ORDER BY received_at DESC LIMIT 1",
                 (expected_ack,)
             ).fetchone()
+            return dict(row) if row else None
+
+    def get_dm_by_id(self, dm_id: int) -> Optional[Dict]:
+        """Fetch a direct message by its ID."""
+        with self._connect() as conn:
+            row = conn.execute(
+                "SELECT * FROM direct_messages WHERE id = ?", (dm_id,)
+            ).fetchone()
+            return dict(row) if row else None
+
+    def find_dm_duplicate(self, contact_pubkey: str, content: str,
+                           sender_timestamp: int = None,
+                           window_seconds: int = 300) -> Optional[Dict]:
+        """Check for duplicate incoming DM (for receiver-side dedup).
+
+        If sender_timestamp is provided, matches exact (sender, timestamp, text).
+        Otherwise falls back to time-window match (same sender + text within window).
+        """
+        contact_pubkey = contact_pubkey.lower()
+        with self._connect() as conn:
+            if sender_timestamp is not None:
+                row = conn.execute(
+                    """SELECT id FROM direct_messages
+                       WHERE contact_pubkey = ? AND direction = 'in'
+                       AND content = ? AND sender_timestamp = ?
+                       LIMIT 1""",
+                    (contact_pubkey, content, sender_timestamp)
+                ).fetchone()
+            else:
+                cutoff = int(time.time()) - window_seconds
+                row = conn.execute(
+                    """SELECT id FROM direct_messages
+                       WHERE contact_pubkey = ? AND direction = 'in'
+                       AND content = ? AND timestamp > ?
+                       LIMIT 1""",
+                    (contact_pubkey, content, cutoff)
+                ).fetchone()
             return dict(row) if row else None
 
     # ================================================================

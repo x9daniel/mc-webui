@@ -1894,7 +1894,7 @@ def get_dm_messages():
                             ack_info = acks[ack_code]
                             msg['status'] = 'delivered'
                             msg['delivery_snr'] = ack_info.get('snr')
-                            msg['delivery_route'] = ack_info.get('route')
+                            msg['delivery_route'] = ack_info.get('route_type', ack_info.get('route'))
             except Exception as e:
                 logger.debug(f"ACK status fetch failed (non-critical): {e}")
 
@@ -1965,19 +1965,21 @@ def send_dm_message():
             }), 400
 
         # Send via CLI
-        success, message = cli.send_dm(recipient, text)
+        success, result = cli.send_dm(recipient, text)
 
         if success:
             return jsonify({
                 'success': True,
                 'message': 'DM sent',
                 'recipient': recipient,
-                'status': 'pending'
+                'status': 'pending',
+                'dm_id': result.get('id'),
+                'expected_ack': result.get('expected_ack'),
             }), 200
         else:
             return jsonify({
                 'success': False,
-                'error': message
+                'error': result.get('error', 'Send failed')
             }), 500
 
     except Exception as e:

@@ -367,12 +367,12 @@ def floodadv() -> Tuple[bool, str]:
 # Direct Messages
 # =============================================================================
 
-def send_dm(recipient: str, text: str) -> Tuple[bool, str]:
-    """Send a direct message."""
+def send_dm(recipient: str, text: str) -> Tuple[bool, Dict]:
+    """Send a direct message. Returns (success, result_dict)."""
     if not recipient or not recipient.strip():
-        return False, "Recipient is required"
+        return False, {'error': "Recipient is required"}
     if not text or not text.strip():
-        return False, "Message text is required"
+        return False, {'error': "Message text is required"}
 
     try:
         dm = _get_dm()
@@ -387,9 +387,9 @@ def send_dm(recipient: str, text: str) -> Tuple[bool, str]:
             pubkey = recipient.strip()
 
         result = dm.send_dm(pubkey, text.strip())
-        return result['success'], result.get('message', result.get('error', ''))
+        return result['success'], result
     except Exception as e:
-        return False, str(e)
+        return False, {'error': str(e)}
 
 
 def check_dm_delivery(ack_codes: list) -> Tuple[bool, Dict, str]:
