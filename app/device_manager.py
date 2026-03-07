@@ -389,10 +389,15 @@ class DeviceManager:
                 contact = self.mc.get_contact_by_key_prefix(sender_key)
                 if contact:
                     sender_name = contact.get('name', '')
-                    # Use the full public key from contacts (not the short prefix)
                     full_key = contact.get('public_key', '')
                     if full_key:
                         sender_key = full_key
+                elif len(sender_key) < 64:
+                    # Prefix not resolved from in-memory contacts — try DB
+                    db_contact = self.db.get_contact_by_prefix(sender_key)
+                    if db_contact and len(db_contact['public_key']) == 64:
+                        sender_key = db_contact['public_key']
+                        sender_name = db_contact.get('name', '')
 
             # Receiver-side dedup: skip duplicate retries
             sender_ts = data.get('sender_timestamp')

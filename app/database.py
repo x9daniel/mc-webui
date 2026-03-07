@@ -128,6 +128,15 @@ class Database:
             ).fetchone()
             return dict(row) if row else None
 
+    def get_contact_by_prefix(self, prefix: str) -> Optional[Dict]:
+        """Find a contact by public key prefix (LIKE match)."""
+        with self._connect() as conn:
+            row = conn.execute(
+                "SELECT * FROM contacts WHERE public_key LIKE ? AND length(public_key) = 64 LIMIT 1",
+                (prefix.lower() + '%',)
+            ).fetchone()
+            return dict(row) if row else None
+
     def delete_contact(self, public_key: str) -> bool:
         with self._connect() as conn:
             cursor = conn.execute(
