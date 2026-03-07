@@ -6,11 +6,18 @@ v2 replaces the `meshcore-cli` bridge with direct `meshcore` library communicati
 
 ## Breaking Changes
 
-### 1. DM contacts must be re-added to the device
+### 1. DM contacts must exist on the device firmware
 
 **Symptom**: Sending a DM to an existing contact fails with "Contact not on device".
 
-**Why**: In v1, `meshcore-cli` acted as a bridge and managed contacts independently. In v2, `meshcore` communicates directly with the device firmware, which **requires** the contact to exist in its internal contact table (max 350 entries) to send a DM. After migration, the database has contacts from v1 advert history, but most of them were never added to the device's firmware contact table.
+**Why**: In v2, `meshcore` communicates directly with the device firmware, which **requires** the contact to exist in its internal contact table (max 350 entries) to send a DM. The mc-webui database may contain hundreds of contacts from advertisement history, but only a handful are actually present on the device.
+
+This can happen after:
+- **Firmware reflash** — wipes the device contact table while the DB retains all contacts
+- **Migration from v1** — v1 `meshcore-cli` bridge managed contacts independently; many DB contacts may have never been added to the device
+- **Device reset** — any factory reset clears the firmware contact table
+
+**How to verify**: Check the startup log for `Synced N contacts from device to database`. This N is the actual number of contacts on the device — likely much smaller than the total in the DB.
 
 **Fix**: For each contact you want to DM:
 1. Delete the contact from the Contacts page
@@ -25,8 +32,6 @@ This adds the contact to the device's firmware table, enabling DM sending.
 
 In v2, deleting a contact is a soft-delete (marked as `source='deleted'` in the database). This preserves DM conversation history. When the contact is re-added, it automatically "undeletes" and all previous DMs are visible again.
 
-In v1, deleting a contact would orphan DM records (set `contact_pubkey = NULL`), causing "Unknown" entries in the DM list.
-
 ### 3. Database schema
 
 v2 uses SQLite with WAL mode instead of flat JSON files. The migration from v1 data happens automatically on first startup (see `app/migrate_v1.py`). The v1 data files are preserved and not modified.
@@ -35,5 +40,6 @@ v2 uses SQLite with WAL mode instead of flat JSON files. The migration from v1 d
 
 - [ ] Verify device connection (green "Connected" indicator)
 - [ ] Check that channel messages are flowing normally
+- [ ] Check startup log: `Synced N contacts from device to database` — this is your actual device contact count
 - [ ] For each DM contact you need: delete, wait for advert, re-approve
 - [ ] Verify DM sending works with a test message
