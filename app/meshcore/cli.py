@@ -147,24 +147,25 @@ def _parse_last_advert(value) -> int:
 
 
 def get_contacts_with_last_seen() -> Tuple[bool, Dict[str, Dict], str]:
-    """Get contacts with last_advert timestamps from DB."""
+    """Get contacts actually on the device firmware (from mc.contacts)."""
     try:
         dm = _get_dm()
-        contacts = dm.db.get_contacts()
+        if not dm.mc or not dm.mc.contacts:
+            return True, {}, ""
         contacts_dict = {}
-        for c in contacts:
-            pk = c.get('public_key', '')
+        for pk, contact in dm.mc.contacts.items():
+            last_adv = contact.get('last_advert')
             contacts_dict[pk] = {
                 'public_key': pk,
-                'type': c.get('type', 1),
-                'flags': c.get('flags', 0),
-                'out_path_len': c.get('out_path_len', -1),
-                'out_path': c.get('out_path', ''),
-                'adv_name': c.get('name', ''),
-                'last_advert': _parse_last_advert(c.get('last_advert')),
-                'adv_lat': c.get('adv_lat', 0.0),
-                'adv_lon': c.get('adv_lon', 0.0),
-                'lastmod': c.get('lastmod', ''),
+                'type': contact.get('type', 1),
+                'flags': contact.get('flags', 0),
+                'out_path_len': contact.get('out_path_len', -1),
+                'out_path': contact.get('out_path', ''),
+                'adv_name': contact.get('adv_name', contact.get('name', '')),
+                'last_advert': int(last_adv) if last_adv and isinstance(last_adv, (int, float)) and last_adv > 0 else 0,
+                'adv_lat': contact.get('adv_lat', 0.0),
+                'adv_lon': contact.get('adv_lon', 0.0),
+                'lastmod': '',
             }
         return True, contacts_dict, ""
     except Exception as e:

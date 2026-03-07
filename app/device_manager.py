@@ -268,11 +268,15 @@ class DeviceManager:
             logger.debug(f"Subscribed to {event_type.value}")
 
     def _sync_contacts_to_db(self):
-        """Sync device contacts to database."""
+        """Sync device contacts to database (bidirectional).
+
+        - Upserts device contacts with source='device'
+        - Downgrades DB contacts marked 'device' that are no longer on device to 'advert'
+        """
         if not self.mc or not self.mc.contacts:
             return
 
-        count = 0
+        device_keys = set()
         for pubkey, contact in self.mc.contacts.items():
             # last_advert from meshcore is Unix timestamp (int) or None
             last_adv = contact.get('last_advert')
@@ -290,8 +294,13 @@ class DeviceManager:
                 adv_lon=contact.get('adv_lon'),
                 source='device',
             )
-            count += 1
-        logger.info(f"Synced {count} contacts from device to database")
+            device_keys.add(pubkey.lower())
+
+        # Downgrade stale 'device' contacts to 'advert' (cache-only)
+        stale = self.db.downgrade_stale_device_contacts(device_keys)
+        if stale:
+            logger.info(f"Downgraded {stale} stale device contacts to cache")
+        logger.info(f"Synced {len(device_keys)} contacts from device to database")
 
     def execute(self, coro, timeout: float = 30) -> Any:
         """

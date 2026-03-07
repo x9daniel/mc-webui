@@ -116,7 +116,7 @@ class Database:
     def get_contacts(self) -> List[Dict]:
         with self._connect() as conn:
             rows = conn.execute(
-                "SELECT * FROM contacts WHERE source != 'deleted' ORDER BY last_seen DESC"
+                "SELECT * FROM contacts ORDER BY last_seen DESC"
             ).fetchall()
             return [dict(r) for r in rows]
 
@@ -147,17 +147,32 @@ class Database:
             return dict(row) if row else None
 
     def delete_contact(self, public_key: str) -> bool:
-        """Soft-delete: mark as 'deleted' instead of removing.
+        """Move contact to cache (source='advert') instead of deleting.
 
-        Keeps the row so FK references in direct_messages stay intact.
-        upsert_contact() overwrites source on re-add, auto-undeleting.
+        Contact stays visible in cache and @mentions but not in device list.
+        upsert_contact() overwrites source on re-add (back to 'device').
         """
         with self._connect() as conn:
             cursor = conn.execute(
-                "UPDATE contacts SET source = 'deleted', lastmod = datetime('now') WHERE public_key = ?",
+                "UPDATE contacts SET source = 'advert', lastmod = datetime('now') WHERE public_key = ?",
                 (public_key.lower(),)
             )
             return cursor.rowcount > 0
+
+    def downgrade_stale_device_contacts(self, active_device_keys: set) -> int:
+        """Downgrade contacts marked 'device' that are no longer on the device."""
+        with self._connect() as conn:
+            all_device = conn.execute(
+                "SELECT public_key FROM contacts WHERE source = 'device'"
+            ).fetchall()
+            stale_keys = [r['public_key'] for r in all_device
+                          if r['public_key'] not in active_device_keys]
+            if stale_keys:
+                conn.executemany(
+                    "UPDATE contacts SET source = 'advert', lastmod = datetime('now') WHERE public_key = ?",
+                    [(k,) for k in stale_keys]
+                )
+            return len(stale_keys)
 
     def set_contact_protected(self, public_key: str, protected: bool) -> bool:
         with self._connect() as conn:
