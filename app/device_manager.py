@@ -848,7 +848,10 @@ class DeviceManager:
             event_data = getattr(event, 'payload', {})
 
             if event.type == EventType.ERROR:
-                return {'success': False, 'error': 'Device error sending DM'}
+                err_detail = event_data.get('error', event_data.get('message', ''))
+                logger.warning(f"Device error sending DM to {recipient_pubkey[:12]}: "
+                               f"payload={event_data}, contact_type={type(contact).__name__}")
+                return {'success': False, 'error': f'Device error sending DM: {err_detail}'}
 
             ack = _to_str(event_data.get('expected_ack'))
             suggested_timeout = event_data.get('suggested_timeout', 15000)
