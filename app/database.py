@@ -137,6 +137,15 @@ class Database:
             ).fetchone()
             return dict(row) if row else None
 
+    def get_contact_by_name(self, name: str) -> Optional[Dict]:
+        """Find a contact by exact name match."""
+        with self._connect() as conn:
+            row = conn.execute(
+                "SELECT * FROM contacts WHERE name = ? AND length(public_key) = 64 LIMIT 1",
+                (name,)
+            ).fetchone()
+            return dict(row) if row else None
+
     def delete_contact(self, public_key: str) -> bool:
         with self._connect() as conn:
             cursor = conn.execute(
@@ -372,6 +381,26 @@ class Database:
                 "SELECT * FROM direct_messages WHERE id = ?", (dm_id,)
             ).fetchone()
             return dict(row) if row else None
+
+    def relink_orphaned_dms(self, public_key: str) -> int:
+        """Re-link DMs with NULL contact_pubkey back to this contact.
+
+        When a contact is deleted, ON DELETE SET NULL nullifies contact_pubkey.
+        When the contact is re-added, re-link those orphaned DMs.
+        Uses raw_json to match by pubkey_prefix.
+        """
+        public_key = public_key.lower()
+        prefix = public_key[:12]  # Short prefix used in pubkey_prefix field
+        with self._connect() as conn:
+            cursor = conn.execute(
+                """UPDATE direct_messages SET contact_pubkey = ?
+                   WHERE contact_pubkey IS NULL
+                   AND (raw_json LIKE ? OR raw_json IS NULL)""",
+                (public_key, f'%{prefix}%')
+            )
+            if cursor.rowcount > 0:
+                logger.info(f"Re-linked {cursor.rowcount} orphaned DMs to {public_key[:12]}...")
+            return cursor.rowcount
 
     def find_dm_duplicate(self, contact_pubkey: str, content: str,
                            sender_timestamp: int = None,

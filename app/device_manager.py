@@ -1167,6 +1167,10 @@ class DeviceManager:
                 return {'success': False, 'error': 'Contact not in pending list'}
 
             self.execute(self.mc.commands.add_contact(contact))
+
+            # Refresh mc.contacts so send_dm can find the new contact
+            self.execute(self.mc.ensure_contacts(follow=True))
+
             last_adv = contact.get('last_advert')
             last_advert_val = (
                 str(int(last_adv))
@@ -1182,6 +1186,9 @@ class DeviceManager:
                 last_advert=last_advert_val,
                 source='device',
             )
+            # Re-link orphaned DMs (from previous ON DELETE SET NULL)
+            self.db.relink_orphaned_dms(pubkey)
+
             # Remove from pending list after successful approval
             self.mc.pending_contacts.pop(pubkey, None)
             return {'success': True, 'message': 'Contact approved'}

@@ -376,15 +376,25 @@ def send_dm(recipient: str, text: str) -> Tuple[bool, Dict]:
 
     try:
         dm = _get_dm()
-        # Try to find contact by name first
+        recipient = recipient.strip()
+
+        # Try to find contact by name in mc.contacts (in-memory)
         contact = None
         if dm.mc:
-            contact = dm.mc.get_contact_by_name(recipient.strip())
+            contact = dm.mc.get_contact_by_name(recipient)
 
         if contact:
             pubkey = contact.get('public_key', recipient)
+        elif len(recipient) >= 12 and all(c in '0123456789abcdef' for c in recipient.lower()):
+            # Looks like a pubkey/prefix already
+            pubkey = recipient
         else:
-            pubkey = recipient.strip()
+            # Name not in mc.contacts — try DB lookup
+            db_contact = dm.db.get_contact_by_name(recipient)
+            if db_contact:
+                pubkey = db_contact['public_key']
+            else:
+                pubkey = recipient
 
         result = dm.send_dm(pubkey, text.strip())
         return result['success'], result
