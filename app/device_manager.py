@@ -827,13 +827,14 @@ class DeviceManager:
             return {'success': False, 'error': 'Device not connected'}
 
         try:
-            # Find contact by pubkey
+            # Find contact dict from mc.contacts (used for retry/path info)
+            # send_msg() also accepts a hex pubkey string directly
             contact = self.mc.contacts.get(recipient_pubkey)
             if not contact:
-                # Try prefix match
                 contact = self.mc.get_contact_by_key_prefix(recipient_pubkey)
             if not contact:
-                return {'success': False, 'error': f'Contact not found: {recipient_pubkey}'}
+                # Use pubkey string directly — meshcore lib handles it
+                contact = recipient_pubkey
 
             # Generate timestamp once — same for all retries (enables receiver dedup)
             timestamp = int(time.time())
