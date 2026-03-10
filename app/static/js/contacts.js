@@ -1037,11 +1037,11 @@ function updateProtectionUI(publicKey, isProtected, buttonEl) {
     // Update button appearance
     buttonEl.disabled = false;
     if (isProtected) {
-        buttonEl.innerHTML = '<i class="bi bi-lock-fill"></i> Protected';
+        buttonEl.innerHTML = '<i class="bi bi-lock-fill"></i> <span class="btn-label">Protected</span>';
         buttonEl.classList.remove('btn-outline-warning');
         buttonEl.classList.add('btn-warning');
     } else {
-        buttonEl.innerHTML = '<i class="bi bi-shield"></i> Protect';
+        buttonEl.innerHTML = '<i class="bi bi-shield"></i> <span class="btn-label">Protect</span>';
         buttonEl.classList.remove('btn-warning');
         buttonEl.classList.add('btn-outline-warning');
     }
@@ -1337,11 +1337,12 @@ function createContactCard(contact, index) {
     infoRow.appendChild(nameDiv);
     infoRow.appendChild(typeBadge);
 
-    // Public key row (use prefix for display)
+    // Public key row (clickable to copy)
     const keyDiv = document.createElement('div');
-    keyDiv.className = 'contact-key';
+    keyDiv.className = 'contact-key clickable-key';
     keyDiv.textContent = contact.public_key_prefix || contact.public_key.substring(0, 12);
-    keyDiv.title = 'Public Key Prefix';
+    keyDiv.title = 'Click to copy';
+    keyDiv.onclick = () => copyToClipboard(keyDiv.textContent, keyDiv);
 
     // Last advert (optional - show if available)
     let lastAdvertDiv = null;
@@ -1359,7 +1360,7 @@ function createContactCard(contact, index) {
     // Approve button
     const approveBtn = document.createElement('button');
     approveBtn.className = 'btn btn-sm btn-success';
-    approveBtn.innerHTML = '<i class="bi bi-check-circle"></i> Approve';
+    approveBtn.innerHTML = '<i class="bi bi-check-circle"></i> <span class="btn-label">Approve</span>';
     approveBtn.onclick = () => approveContact(contact, index);
 
     actionsDiv.appendChild(approveBtn);
@@ -1368,23 +1369,15 @@ function createContactCard(contact, index) {
     if (contact.adv_lat && contact.adv_lon && (contact.adv_lat !== 0 || contact.adv_lon !== 0)) {
         const mapBtn = document.createElement('button');
         mapBtn.className = 'btn btn-sm btn-outline-primary';
-        mapBtn.innerHTML = '<i class="bi bi-geo-alt"></i> Map';
+        mapBtn.innerHTML = '<i class="bi bi-geo-alt"></i> <span class="btn-label">Map</span>';
         mapBtn.onclick = () => window.showContactOnMap(contact.name, contact.adv_lat, contact.adv_lon);
         actionsDiv.appendChild(mapBtn);
     }
 
-    // Copy key button
-    const copyBtn = document.createElement('button');
-    copyBtn.className = 'btn btn-sm btn-outline-secondary';
-    copyBtn.innerHTML = '<i class="bi bi-clipboard"></i> Copy Key';
-    copyBtn.onclick = () => copyPublicKey(contact.public_key, copyBtn);
-
-    actionsDiv.appendChild(copyBtn);
-
     // Ignore button
     const ignoreBtn = document.createElement('button');
     ignoreBtn.className = 'btn btn-sm btn-outline-secondary';
-    ignoreBtn.innerHTML = '<i class="bi bi-eye-slash"></i> Ignore';
+    ignoreBtn.innerHTML = '<i class="bi bi-eye-slash"></i> <span class="btn-label">Ignore</span>';
     ignoreBtn.onclick = () => {
         toggleContactIgnore(contact.public_key, true).then(() => loadPendingContacts());
     };
@@ -1393,7 +1386,7 @@ function createContactCard(contact, index) {
     // Block button
     const blockBtn = document.createElement('button');
     blockBtn.className = 'btn btn-sm btn-outline-danger';
-    blockBtn.innerHTML = '<i class="bi bi-slash-circle"></i> Block';
+    blockBtn.innerHTML = '<i class="bi bi-slash-circle"></i> <span class="btn-label">Block</span>';
     blockBtn.onclick = () => {
         toggleContactBlock(contact.public_key, true).then(() => loadPendingContacts());
     };
@@ -2091,7 +2084,7 @@ function createExistingContactCard(contact, index) {
     if (contact.adv_lat && contact.adv_lon && (contact.adv_lat !== 0 || contact.adv_lon !== 0)) {
         const mapBtn = document.createElement('button');
         mapBtn.className = 'btn btn-sm btn-outline-primary';
-        mapBtn.innerHTML = '<i class="bi bi-geo-alt"></i> Map';
+        mapBtn.innerHTML = '<i class="bi bi-geo-alt"></i> <span class="btn-label">Map</span>';
         mapBtn.onclick = () => window.showContactOnMap(contact.name, contact.adv_lat, contact.adv_lon);
         actionsDiv.appendChild(mapBtn);
     }
@@ -2101,14 +2094,14 @@ function createExistingContactCard(contact, index) {
         const protectBtn = document.createElement('button');
         protectBtn.className = isProtected ? 'btn btn-sm btn-warning' : 'btn btn-sm btn-outline-warning';
         protectBtn.innerHTML = isProtected
-            ? '<i class="bi bi-lock-fill"></i> Protected'
-            : '<i class="bi bi-shield"></i> Protect';
+            ? '<i class="bi bi-lock-fill"></i> <span class="btn-label">Protected</span>'
+            : '<i class="bi bi-shield"></i> <span class="btn-label">Protect</span>';
         protectBtn.onclick = () => toggleContactProtection(contact.public_key, protectBtn);
         actionsDiv.appendChild(protectBtn);
 
         const deleteBtn = document.createElement('button');
         deleteBtn.className = 'btn btn-sm btn-outline-danger';
-        deleteBtn.innerHTML = '<i class="bi bi-trash"></i> Delete';
+        deleteBtn.innerHTML = '<i class="bi bi-trash"></i> <span class="btn-label">Delete</span>';
         deleteBtn.onclick = () => showDeleteModal(contact);
         deleteBtn.disabled = isProtected;
         if (isProtected) {
@@ -2121,25 +2114,25 @@ function createExistingContactCard(contact, index) {
     if (contact.is_blocked) {
         const unblockBtn = document.createElement('button');
         unblockBtn.className = 'btn btn-sm btn-outline-success';
-        unblockBtn.innerHTML = '<i class="bi bi-slash-circle"></i> Unblock';
+        unblockBtn.innerHTML = '<i class="bi bi-slash-circle"></i> <span class="btn-label">Unblock</span>';
         unblockBtn.onclick = () => toggleContactBlock(contact.public_key, false);
         actionsDiv.appendChild(unblockBtn);
     } else if (contact.is_ignored) {
         const unignoreBtn = document.createElement('button');
         unignoreBtn.className = 'btn btn-sm btn-outline-success';
-        unignoreBtn.innerHTML = '<i class="bi bi-eye"></i> Unignore';
+        unignoreBtn.innerHTML = '<i class="bi bi-eye"></i> <span class="btn-label">Unignore</span>';
         unignoreBtn.onclick = () => toggleContactIgnore(contact.public_key, false);
         actionsDiv.appendChild(unignoreBtn);
     } else {
         const ignoreBtn = document.createElement('button');
         ignoreBtn.className = 'btn btn-sm btn-outline-secondary';
-        ignoreBtn.innerHTML = '<i class="bi bi-eye-slash"></i> Ignore';
+        ignoreBtn.innerHTML = '<i class="bi bi-eye-slash"></i> <span class="btn-label">Ignore</span>';
         ignoreBtn.onclick = () => toggleContactIgnore(contact.public_key, true);
         actionsDiv.appendChild(ignoreBtn);
 
         const blockBtn = document.createElement('button');
         blockBtn.className = 'btn btn-sm btn-outline-danger';
-        blockBtn.innerHTML = '<i class="bi bi-slash-circle"></i> Block';
+        blockBtn.innerHTML = '<i class="bi bi-slash-circle"></i> <span class="btn-label">Block</span>';
         blockBtn.onclick = () => toggleContactBlock(contact.public_key, true);
         actionsDiv.appendChild(blockBtn);
     }

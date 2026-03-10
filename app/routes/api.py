@@ -2751,6 +2751,13 @@ def get_pending_contacts_api():
                 excluded = ignored_keys | blocked_keys
                 pending = [c for c in pending if c.get('public_key', '').lower() not in excluded]
 
+            # Add type_label for frontend display
+            type_labels = {1: 'CLI', 2: 'REP', 3: 'ROOM', 4: 'SENS'}
+            for c in pending:
+                c['type_label'] = type_labels.get(c.get('type', 0), 'CLI')
+                pk = c.get('public_key', '')
+                c['public_key_prefix'] = pk[:12] if len(pk) >= 12 else pk
+
             # Filter by types if specified
             if types_param:
                 pending = [contact for contact in pending if contact.get('type') in types_param]

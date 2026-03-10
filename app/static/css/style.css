@@ -333,6 +333,18 @@ main {
         font-size: 0.875rem;
     }
 
+    /* Contact card buttons: icon-only on mobile */
+    .pending-contact-card .btn-label,
+    .existing-contact-card .btn-label {
+        display: none;
+    }
+
+    /* Allow button wrapping on small screens */
+    .pending-contact-card .d-flex.gap-2,
+    .existing-contact-card .d-flex.gap-2 {
+        flex-wrap: wrap;
+    }
+
     /* Modal: Better mobile layout */
     .modal-dialog {
         margin: 0.5rem;
