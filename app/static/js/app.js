@@ -1041,12 +1041,12 @@ async function ignoreContactFromChat(pubkey) {
         });
         const data = await response.json();
         if (data.success) {
-            showToast(data.message, 'info');
+            showNotification(data.message, 'info');
         } else {
-            showToast('Failed: ' + data.error, 'danger');
+            showNotification('Failed: ' + data.error, 'danger');
         }
     } catch (err) {
-        showToast('Network error', 'danger');
+        showNotification('Network error', 'danger');
     }
 }
 
@@ -1072,16 +1072,16 @@ async function blockContactFromChat(senderName) {
         }
         const data = await response.json();
         if (data.success) {
-            showToast(data.message, 'warning');
+            showNotification(data.message, 'warning');
             // Update blocked names then reload messages to hide blocked sender
             await loadBlockedNames();
             await loadMessages();
         } else {
-            showToast('Failed: ' + data.error, 'danger');
+            showNotification('Failed: ' + data.error, 'danger');
         }
     } catch (err) {
         console.error('Error blocking contact from chat:', err);
-        showToast('Network error', 'danger');
+        showNotification('Network error', 'danger');
     }
 }
 
