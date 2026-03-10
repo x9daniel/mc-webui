@@ -777,8 +777,9 @@ function displayMessages(messages) {
         return;
     }
 
-    // Render each message
+    // Render each message (skip blocked senders client-side as extra safety)
     messages.forEach(msg => {
+        if (!msg.is_own && blockedContactNames.has(msg.sender)) return;
         const messageEl = createMessageElement(msg);
         container.appendChild(messageEl);
     });
@@ -1072,12 +1073,14 @@ async function blockContactFromChat(senderName) {
         const data = await response.json();
         if (data.success) {
             showToast(data.message, 'warning');
+            // Update blocked names then reload messages to hide blocked sender
             await loadBlockedNames();
-            loadMessages();  // re-render to hide blocked messages
+            await loadMessages();
         } else {
             showToast('Failed: ' + data.error, 'danger');
         }
     } catch (err) {
+        console.error('Error blocking contact from chat:', err);
         showToast('Network error', 'danger');
     }
 }
