@@ -23,7 +23,8 @@ let markersGroup = null;
 let contactsGeoCache = {};  // { 'contactName': { lat, lon }, ... }
 let contactsPubkeyMap = {};  // { 'contactName': 'full_pubkey', ... }
 let blockedContactNames = new Set();  // Names of blocked contacts
-let allContactsWithGps = [];  // Cached contacts for map filtering
+let allContactsWithGps = [];  // Device contacts for map filtering
+let allCachedContactsWithGps = [];  // Cache-only contacts for map
 
 // SocketIO state
 let chatSocket = null;  // SocketIO connection to /chat namespace
@@ -152,10 +153,27 @@ function updateMapMarkers() {
 
     markersGroup.clearLayers();
     const selectedTypes = getSelectedMapTypes();
+    const showCached = document.getElementById('mapCachedSwitch')?.checked || false;
 
+    // Device contacts filtered by type
+    const deviceKeySet = new Set(allContactsWithGps.map(c => c.public_key));
     const filteredContacts = allContactsWithGps.filter(c => selectedTypes.includes(c.type));
 
-    if (filteredContacts.length === 0) {
+    // Cache-only contacts (not on device) filtered by type
+    const TYPE_LABEL_TO_NUM = { 'CLI': 1, 'REP': 2, 'ROOM': 3, 'SENS': 4 };
+    let cachedFiltered = [];
+    if (showCached) {
+        cachedFiltered = allCachedContactsWithGps
+            .filter(c => !deviceKeySet.has(c.public_key))
+            .filter(c => {
+                const typeNum = TYPE_LABEL_TO_NUM[c.type_label];
+                return typeNum ? selectedTypes.includes(typeNum) : false;
+            });
+    }
+
+    const allFiltered = [...filteredContacts, ...cachedFiltered];
+
+    if (allFiltered.length === 0) {
         leafletMap.setView([52.0, 19.0], 6);
         return;
     }
@@ -175,6 +193,24 @@ function updateMapMarkers() {
         })
             .addTo(markersGroup)
             .bindPopup(`<b>${c.name}</b><br><span class="text-muted">${typeName}</span>`);
+
+        bounds.push([c.adv_lat, c.adv_lon]);
+    });
+
+    cachedFiltered.forEach(c => {
+        const typeNum = TYPE_LABEL_TO_NUM[c.type_label] || 1;
+        const color = CONTACT_TYPE_COLORS[typeNum] || '#2196F3';
+
+        L.circleMarker([c.adv_lat, c.adv_lon], {
+            radius: 8,
+            fillColor: color,
+            color: '#999',
+            weight: 1,
+            opacity: 0.8,
+            fillOpacity: 0.5
+        })
+            .addTo(markersGroup)
+            .bindPopup(`<b>${c.name}</b><br><span class="text-muted">${c.type_label || 'Cache'} (cached)</span>`);
 
         bounds.push([c.adv_lat, c.adv_lon]);
     });
@@ -203,16 +239,27 @@ async function showAllContactsOnMap() {
         markersGroup.clearLayers();
 
         try {
-            const response = await fetch('/api/contacts/detailed');
-            const data = await response.json();
+            // Fetch device and cached contacts in parallel
+            const [deviceResp, cachedResp] = await Promise.all([
+                fetch('/api/contacts/detailed'),
+                fetch('/api/contacts/cached?format=full')
+            ]);
+            const deviceData = await deviceResp.json();
+            const cachedData = await cachedResp.json();
 
-            if (data.success && data.contacts) {
-                allContactsWithGps = data.contacts.filter(c =>
+            if (deviceData.success && deviceData.contacts) {
+                allContactsWithGps = deviceData.contacts.filter(c =>
                     c.adv_lat && c.adv_lon && (c.adv_lat !== 0 || c.adv_lon !== 0)
                 );
-
-                updateMapMarkers();
             }
+
+            if (cachedData.success && cachedData.contacts) {
+                allCachedContactsWithGps = cachedData.contacts.filter(c =>
+                    c.adv_lat && c.adv_lon && (c.adv_lat !== 0 || c.adv_lon !== 0)
+                );
+            }
+
+            updateMapMarkers();
         } catch (err) {
             console.error('Error loading contacts for map:', err);
         }
@@ -231,6 +278,12 @@ async function showAllContactsOnMap() {
             };
         }
     });
+
+    // Setup cached switch listener
+    const cachedSwitch = document.getElementById('mapCachedSwitch');
+    if (cachedSwitch) {
+        cachedSwitch.onchange = () => updateMapMarkers();
+    }
 
     modalEl.addEventListener('shown.bs.modal', onShown);
     modal.show();
