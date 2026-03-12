@@ -1339,6 +1339,102 @@ async function loadDeviceInfo() {
 }
 
 /**
+ * Load device statistics (Stats tab in Device modal)
+ */
+async function loadDeviceStats() {
+    const container = document.getElementById('deviceStatsContent');
+    if (!container) return;
+
+    container.innerHTML = '<div class="text-center py-3"><div class="spinner-border spinner-border-sm"></div> Loading...</div>';
+
+    try {
+        const response = await fetch('/api/device/stats');
+        const data = await response.json();
+
+        if (!data.success) {
+            container.innerHTML = `<div class="alert alert-danger mb-0">${escapeHtml(data.error)}</div>`;
+            return;
+        }
+
+        const stats = data.stats || {};
+        const bat = data.battery || {};
+        let html = '<table class="table table-sm mb-0"><tbody>';
+
+        // Battery
+        if (bat && typeof bat === 'object' && bat.voltage) {
+            html += `<tr><td class="text-muted">Battery</td><td>${bat.voltage}V</td></tr>`;
+        } else if (bat) {
+            html += `<tr><td class="text-muted">Battery</td><td>${bat}</td></tr>`;
+        }
+
+        // Core stats
+        if (stats.core) {
+            const c = stats.core;
+            if (c.uptime !== undefined) {
+                const d = Math.floor(c.uptime / 86400);
+                const h = Math.floor((c.uptime % 86400) / 3600);
+                const m = Math.floor((c.uptime % 3600) / 60);
+                html += `<tr><td class="text-muted">Uptime</td><td>${d}d ${h}h ${m}m</td></tr>`;
+            }
+            if (c.queue_length !== undefined)
+                html += `<tr><td class="text-muted">Queue</td><td>${c.queue_length}</td></tr>`;
+            if (c.errors !== undefined)
+                html += `<tr><td class="text-muted">Errors</td><td>${c.errors}</td></tr>`;
+        }
+
+        // Radio stats
+        if (stats.radio) {
+            const r = stats.radio;
+            if (r.tx_air_time !== undefined)
+                html += `<tr><td class="text-muted">TX Air Time</td><td>${r.tx_air_time.toFixed(1)} min</td></tr>`;
+            if (r.rx_air_time !== undefined)
+                html += `<tr><td class="text-muted">RX Air Time</td><td>${r.rx_air_time.toFixed(1)} min</td></tr>`;
+        }
+
+        // Packet stats
+        if (stats.packets) {
+            const p = stats.packets;
+            if (p.sent !== undefined)
+                html += `<tr><td class="text-muted">Packets TX</td><td>${p.sent.toLocaleString()}</td></tr>`;
+            if (p.received !== undefined)
+                html += `<tr><td class="text-muted">Packets RX</td><td>${p.received.toLocaleString()}</td></tr>`;
+        }
+
+        // DB stats (included in same response)
+        if (data.db_stats) {
+            const db = data.db_stats;
+            if (db.contacts !== undefined)
+                html += `<tr><td class="text-muted">Contacts (DB)</td><td>${db.contacts}</td></tr>`;
+            if (db.channel_messages !== undefined)
+                html += `<tr><td class="text-muted">Channel Msgs</td><td>${db.channel_messages.toLocaleString()}</td></tr>`;
+            if (db.direct_messages !== undefined)
+                html += `<tr><td class="text-muted">Direct Msgs</td><td>${db.direct_messages.toLocaleString()}</td></tr>`;
+            if (db.db_size_bytes !== undefined) {
+                const sizeMB = (db.db_size_bytes / (1024 * 1024)).toFixed(1);
+                html += `<tr><td class="text-muted">DB Size</td><td>${sizeMB} MB</td></tr>`;
+            }
+        }
+
+        html += '</tbody></table>';
+
+        if (html === '<table class="table table-sm mb-0"><tbody></tbody></table>') {
+            container.innerHTML = '<div class="text-center text-muted py-3">No statistics available</div>';
+        } else {
+            container.innerHTML = html;
+        }
+
+    } catch (error) {
+        console.error('Error loading device stats:', error);
+        container.innerHTML = '<div class="alert alert-danger mb-0">Failed to load stats</div>';
+    }
+}
+
+// Load stats when Stats tab is clicked
+document.addEventListener('DOMContentLoaded', () => {
+    document.getElementById('statsTabBtn')?.addEventListener('shown.bs.tab', loadDeviceStats);
+});
+
+/**
  * Cleanup inactive contacts
  */
 async function cleanupContacts() {

@@ -1061,6 +1061,32 @@ def get_device_info():
         }), 500
 
 
+@api_bp.route('/device/stats', methods=['GET'])
+def get_device_stats():
+    """
+    Get device statistics (uptime, radio, packets).
+    """
+    try:
+        dm = current_app.config.get('DEVICE_MANAGER')
+        if not dm or not dm.is_connected:
+            return jsonify({'success': False, 'error': 'Device not connected'}), 503
+
+        stats = dm.get_device_stats()
+        bat = dm.get_battery()
+        db_stats = dm.db.get_stats() if dm.db else {}
+
+        return jsonify({
+            'success': True,
+            'stats': stats,
+            'battery': bat,
+            'db_stats': db_stats,
+        }), 200
+
+    except Exception as e:
+        logger.error(f"Error getting device stats: {e}")
+        return jsonify({'success': False, 'error': str(e)}), 500
+
+
 # =============================================================================
 # Special Commands
 # =============================================================================
