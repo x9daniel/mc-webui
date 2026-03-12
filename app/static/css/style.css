@@ -1402,3 +1402,26 @@ main {
         font-size: 0.9rem;
     }
 }
+
+/* =============================================================================
+   Global Search
+   ============================================================================= */
+
+#searchResults {
+    max-height: 60vh;
+    overflow-y: auto;
+}
+
+#searchResults .list-group-item {
+    border-left: 3px solid transparent;
+}
+
+#searchResults .list-group-item:hover {
+    border-left-color: var(--bs-primary);
+}
+
+#searchResults mark {
+    background-color: #fff3cd;
+    padding: 0 2px;
+    border-radius: 2px;
+}

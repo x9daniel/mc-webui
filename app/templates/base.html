@@ -38,6 +38,9 @@
                 {% endif %}
             </span>
             <div class="d-flex align-items-center gap-2">
+                <button id="globalSearchBtn" class="btn btn-outline-light btn-sm" data-bs-toggle="modal" data-bs-target="#searchModal" title="Search all messages">
+                    <i class="bi bi-search"></i>
+                </button>
                 <div id="notificationBell" class="btn btn-outline-light btn-sm position-relative" style="cursor: pointer;" onclick="markAllChannelsRead()" title="Mark all as read">
                     <i class="bi bi-bell"></i>
                 </div>
@@ -347,6 +350,32 @@
                     <button type="button" class="btn btn-secondary" data-bs-dismiss="modal" id="updateCancelBtn">Cancel</button>
                     <button type="button" class="btn btn-primary d-none" id="updateConfirmBtn">Update Now</button>
                     <button type="button" class="btn btn-primary d-none" id="updateReloadBtn" onclick="location.reload()">Reload Page</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Search Modal -->
+    <div class="modal fade" id="searchModal" tabindex="-1">
+        <div class="modal-dialog modal-lg">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h5 class="modal-title"><i class="bi bi-search"></i> Search Messages</h5>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+                </div>
+                <div class="modal-body">
+                    <div class="input-group mb-3">
+                        <input type="text" class="form-control" id="searchInput" placeholder="Search all messages..." autofocus>
+                        <button class="btn btn-primary" type="button" id="searchBtn">
+                            <i class="bi bi-search"></i>
+                        </button>
+                    </div>
+                    <div id="searchResults">
+                        <div class="text-center text-muted py-4">
+                            <i class="bi bi-search" style="font-size: 2rem;"></i>
+                            <p class="mt-2 mb-0">Search across all channel and direct messages</p>
+                        </div>
+                    </div>
                 </div>
             </div>
         </div>

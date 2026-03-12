@@ -3625,3 +3625,134 @@ function clearFilterState() {
     }
 }
 
+// =============================================================================
+// Global Message Search (FTS5)
+// =============================================================================
+
+let searchDebounceTimer = null;
+
+function initializeSearch() {
+    const input = document.getElementById('searchInput');
+    const btn = document.getElementById('searchBtn');
+    if (!input || !btn) return;
+
+    // Search on Enter or button click
+    btn.addEventListener('click', () => performSearch(input.value));
+    input.addEventListener('keydown', (e) => {
+        if (e.key === 'Enter') performSearch(input.value);
+    });
+
+    // Debounced search as user types (300ms)
+    input.addEventListener('input', () => {
+        clearTimeout(searchDebounceTimer);
+        searchDebounceTimer = setTimeout(() => {
+            if (input.value.trim().length >= 2) {
+                performSearch(input.value);
+            }
+        }, 300);
+    });
+
+    // Focus input when modal opens
+    document.getElementById('searchModal')?.addEventListener('shown.bs.modal', () => {
+        input.focus();
+    });
+}
+
+async function performSearch(query) {
+    query = query.trim();
+    const container = document.getElementById('searchResults');
+    if (!container) return;
+
+    if (query.length < 2) {
+        container.innerHTML = '<div class="text-center text-muted py-4"><p>Type at least 2 characters to search</p></div>';
+        return;
+    }
+
+    container.innerHTML = '<div class="text-center py-4"><div class="spinner-border spinner-border-sm"></div> Searching...</div>';
+
+    try {
+        const response = await fetch(`/api/messages/search?q=${encodeURIComponent(query)}&limit=50`);
+        const data = await response.json();
+
+        if (!data.success) {
+            container.innerHTML = `<div class="alert alert-danger">${escapeHtml(data.error)}</div>`;
+            return;
+        }
+
+        if (data.results.length === 0) {
+            container.innerHTML = `<div class="text-center text-muted py-4"><i class="bi bi-inbox" style="font-size: 2rem;"></i><p class="mt-2">No results for "${escapeHtml(query)}"</p></div>`;
+            return;
+        }
+
+        container.innerHTML = `<div class="text-muted small mb-2">${data.count} result${data.count !== 1 ? 's' : ''}</div>`;
+
+        const list = document.createElement('div');
+        list.className = 'list-group';
+
+        data.results.forEach(r => {
+            const item = document.createElement('a');
+            item.className = 'list-group-item list-group-item-action';
+            item.style.cursor = 'pointer';
+
+            const time = formatTime(r.timestamp);
+            const snippet = highlightSearchTerm(escapeHtml(r.content), query);
+
+            if (r.source === 'channel') {
+                item.innerHTML = `
+                    <div class="d-flex justify-content-between align-items-start">
+                        <div>
+                            <span class="badge bg-primary me-1">#${escapeHtml(r.channel_name || '')}</span>
+                            <strong class="small">${r.is_own ? 'You' : escapeHtml(r.sender || '')}</strong>
+                        </div>
+                        <small class="text-muted">${time}</small>
+                    </div>
+                    <div class="small mt-1">${snippet}</div>
+                `;
+                item.addEventListener('click', () => {
+                    // Navigate to channel
+                    const selector = document.getElementById('channelSelector');
+                    if (selector) {
+                        selector.value = r.channel_idx;
+                        selector.dispatchEvent(new Event('change'));
+                    }
+                    bootstrap.Modal.getInstance(document.getElementById('searchModal'))?.hide();
+                });
+            } else {
+                item.innerHTML = `
+                    <div class="d-flex justify-content-between align-items-start">
+                        <div>
+                            <span class="badge bg-success me-1">DM</span>
+                            <strong class="small">${escapeHtml(r.contact_name || '')}</strong>
+                            <span class="text-muted small">${r.direction === 'out' ? '(sent)' : '(received)'}</span>
+                        </div>
+                        <small class="text-muted">${time}</small>
+                    </div>
+                    <div class="small mt-1">${snippet}</div>
+                `;
+                item.addEventListener('click', () => {
+                    // Navigate to DM conversation
+                    window.location.href = `/dm?conversation=${encodeURIComponent(r.contact_pubkey)}`;
+                });
+            }
+
+            list.appendChild(item);
+        });
+
+        container.appendChild(list);
+
+    } catch (error) {
+        console.error('Search error:', error);
+        container.innerHTML = '<div class="alert alert-danger">Search failed. Please try again.</div>';
+    }
+}
+
+function highlightSearchTerm(html, query) {
+    if (!query) return html;
+    const normalizedQuery = query.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+    const regex = new RegExp(`(${normalizedQuery})`, 'gi');
+    return html.replace(regex, '<mark>$1</mark>');
+}
+
+// Initialize search when DOM is ready
+document.addEventListener('DOMContentLoaded', initializeSearch);
+

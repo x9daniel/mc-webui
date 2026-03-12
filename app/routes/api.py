@@ -1740,6 +1740,77 @@ def get_messages_updates():
 
 
 # =============================================================================
+# Message Search
+# =============================================================================
+
+@api_bp.route('/messages/search', methods=['GET'])
+def search_messages():
+    """
+    Full-text search across all channel and direct messages (FTS5).
+
+    Query params:
+        q (str): Search query (required)
+        limit (int): Max results (default: 50)
+
+    Returns:
+        JSON with search results sorted by timestamp descending.
+    """
+    query = request.args.get('q', '').strip()
+    if not query:
+        return jsonify({'success': False, 'error': 'Missing search query'}), 400
+
+    limit = request.args.get('limit', 50, type=int)
+    limit = min(limit, 200)
+
+    try:
+        dm = current_app.config.get('DEVICE_MANAGER')
+        db = dm.db if dm else None
+        if not db:
+            return jsonify({'success': False, 'error': 'Database not available'}), 503
+
+        # FTS5 query — wrap in quotes for phrase search if contains spaces
+        # and add * for prefix matching
+        fts_query = query
+        results = db.search_messages(fts_query, limit=limit)
+
+        # Enrich results with channel names and contact info
+        success, channels_list = get_channels_cached()
+        channel_names = {ch['index']: ch['name'] for ch in channels_list} if success else {}
+
+        enriched = []
+        for r in results:
+            item = {
+                'id': r.get('id'),
+                'content': r.get('content', ''),
+                'timestamp': r.get('timestamp', 0),
+                'source': r.get('msg_source', 'channel'),
+            }
+            if r.get('msg_source') == 'channel':
+                item['sender'] = r.get('sender', '')
+                item['channel_idx'] = r.get('channel_idx')
+                item['channel_name'] = channel_names.get(r.get('channel_idx'), f"Channel {r.get('channel_idx')}")
+                item['is_own'] = bool(r.get('is_own'))
+            else:
+                item['contact_pubkey'] = r.get('contact_pubkey', '')
+                item['direction'] = r.get('direction', '')
+                # Look up contact name
+                contact = db.get_contact(r.get('contact_pubkey', '')) if r.get('contact_pubkey') else None
+                item['contact_name'] = contact.get('name', r.get('contact_pubkey', '')[:12]) if contact else r.get('contact_pubkey', '')[:12]
+            enriched.append(item)
+
+        return jsonify({
+            'success': True,
+            'results': enriched,
+            'count': len(enriched),
+            'query': query
+        }), 200
+
+    except Exception as e:
+        logger.error(f"Search error: {e}")
+        return jsonify({'success': False, 'error': str(e)}), 500
+
+
+# =============================================================================
 # Direct Messages (DM) Endpoints
 # =============================================================================
 
