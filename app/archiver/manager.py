@@ -613,9 +613,9 @@ def schedule_daily_archiving():
 
 def init_backup_schedule():
     """Initialize daily backup job from config."""
-    global _scheduler, _db
+    global _scheduler
 
-    if _scheduler is None or _db is None:
+    if _scheduler is None:
         return
 
     if not config.MC_BACKUP_ENABLED:
