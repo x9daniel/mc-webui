@@ -975,7 +975,7 @@ class DeviceManager:
 
     async def _dm_retry_task(self, dm_id: int, contact, text: str,
                               timestamp: int, initial_ack: str,
-                              suggested_timeout: int, max_attempts: int = 3):
+                              suggested_timeout: int, max_attempts: int = 10):
         """Background retry with same timestamp for dedup on receiver."""
         from meshcore.events import EventType
 
@@ -995,7 +995,7 @@ class DeviceManager:
         # Retry with same timestamp, incrementing attempt
         for attempt in range(1, max_attempts):
             # After 2 failed direct attempts, reset path to flood
-            if attempt >= 2:
+            if attempt >= 8:
                 try:
                     await self.mc.commands.reset_path(contact)
                     logger.info(f"DM retry {attempt}: reset path to flood")
