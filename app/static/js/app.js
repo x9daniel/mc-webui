@@ -397,6 +397,10 @@ function connectChatSocket() {
         console.log('SocketIO connected to /chat');
     });
 
+    chatSocket.on('connect_error', (err) => {
+        console.error('SocketIO /chat connect error:', err.message);
+    });
+
     // Real-time new channel message
     chatSocket.on('new_message', (data) => {
         // Filter blocked contacts in real-time
@@ -410,6 +414,8 @@ function connectChatSocket() {
                 updateUnreadBadges();
                 checkAndNotify();
             } else if (!currentArchiveDate) {
+                // Skip own messages — already appended optimistically on send
+                if (data.is_own) return;
                 // Current channel and live view — append message directly (no full reload)
                 appendMessageFromSocket(data);
             }
@@ -1063,6 +1069,19 @@ async function sendMessage() {
     const sendBtn = document.getElementById('sendBtn');
     sendBtn.disabled = true;
 
+    // Optimistic append: show sent message immediately before API round-trip
+    input.value = '';
+    updateCharCounter();
+    const optimisticId = '_pending_' + Date.now();
+    appendMessageFromSocket({
+        id: optimisticId,
+        sender: window.MC_CONFIG?.deviceName || 'Me',
+        content: text,
+        timestamp: Math.floor(Date.now() / 1000),
+        is_own: true,
+        channel_idx: currentChannelIdx,
+    });
+
     try {
         const response = await fetch('/api/messages', {
             method: 'POST',
@@ -1078,12 +1097,9 @@ async function sendMessage() {
         const data = await response.json();
 
         if (data.success) {
-            input.value = '';
-            updateCharCounter();
             showNotification('Message sent', 'success');
 
-            // Message will appear via SocketIO 'new_message' event (no reload needed).
-            // Schedule one deferred reload to pick up echo data (echoes arrive within 5-30s).
+            // Schedule deferred reload to pick up echo data + replace optimistic msg with real one
             setTimeout(() => loadMessages(), 15000);
         } else {
             showNotification('Failed to send: ' + data.error, 'danger');

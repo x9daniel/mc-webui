@@ -122,6 +122,21 @@ def create_app():
 
 
 # ============================================================
+# WebSocket handlers for Chat (real-time message push)
+# ============================================================
+
+@socketio.on('connect', namespace='/chat')
+def handle_chat_connect():
+    """Handle chat WebSocket connection — required for /chat namespace to accept clients."""
+    logger.info("Chat WebSocket client connected")
+
+
+@socketio.on('disconnect', namespace='/chat')
+def handle_chat_disconnect():
+    logger.debug("Chat WebSocket client disconnected")
+
+
+# ============================================================
 # WebSocket handlers for Console
 # ============================================================
 

@@ -1,4 +1,4 @@
-const CACHE_NAME = 'mc-webui-v5';
+const CACHE_NAME = 'mc-webui-v6';
 const ASSETS_TO_CACHE = [
     '/',
     '/static/css/style.css',

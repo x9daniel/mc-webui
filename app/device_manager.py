@@ -388,6 +388,7 @@ class DeviceManager:
                     'timestamp': ts,
                     'id': msg_id,
                 }, namespace='/chat')
+                logger.debug(f"SocketIO emitted new_message for ch{channel_idx} msg #{msg_id}")
 
         except Exception as e:
             logger.error(f"Error handling channel message: {e}")
