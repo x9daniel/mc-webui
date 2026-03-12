@@ -382,8 +382,8 @@ function connectChatSocket() {
                 updateUnreadBadges();
                 checkAndNotify();
             } else if (!currentArchiveDate) {
-                // Current channel and live view — refresh messages
-                loadMessages();
+                // Current channel and live view — append message directly (no full reload)
+                appendMessageFromSocket(data);
             }
         } else if (data.type === 'dm') {
             // Update DM badge on main page
@@ -855,6 +855,47 @@ function displayMessages(messages) {
 }
 
 /**
+ * Append a single message from SocketIO event (no full reload).
+ * Removes the "empty state" placeholder if present.
+ */
+function appendMessageFromSocket(data) {
+    const container = document.getElementById('messagesList');
+
+    // Remove empty-state placeholder if present
+    const emptyState = container.querySelector('.empty-state');
+    if (emptyState) emptyState.remove();
+
+    // Build a msg object compatible with createMessageElement
+    const msg = {
+        id: data.id || null,
+        sender: data.sender || '',
+        content: data.content || '',
+        timestamp: data.timestamp || Math.floor(Date.now() / 1000),
+        is_own: !!data.is_own,
+        channel_idx: data.channel_idx,
+        snr: data.snr || null,
+        path_len: data.path_len || null,
+        echo_paths: [],
+        echo_snrs: [],
+        analyzer_url: null,
+        pkt_payload: data.pkt_payload || null,
+        txt_type: data.txt_type || 0,
+    };
+
+    const messageEl = createMessageElement(msg);
+    container.appendChild(messageEl);
+
+    // Auto-scroll to bottom if user wasn't scrolling up
+    if (!isUserScrolling) {
+        scrollToBottom();
+    }
+
+    // Update last message count and read status
+    lastMessageCount++;
+    markChannelAsRead(currentChannelIdx, msg.timestamp);
+}
+
+/**
  * Create message DOM element
  */
 function createMessageElement(msg) {
@@ -1013,10 +1054,8 @@ async function sendMessage() {
             updateCharCounter();
             showNotification('Message sent', 'success');
 
-            // Reload messages after short delay to show sent message
-            setTimeout(() => loadMessages(), 1000);
-            // Reload again to catch echo counts (echoes typically arrive within 5-30 seconds)
-            setTimeout(() => loadMessages(), 6000);
+            // Message will appear via SocketIO 'new_message' event (no reload needed).
+            // Schedule one deferred reload to pick up echo data (echoes arrive within 5-30s).
             setTimeout(() => loadMessages(), 15000);
         } else {
             showNotification('Failed to send: ' + data.error, 'danger');

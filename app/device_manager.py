@@ -883,6 +883,18 @@ class DeviceManager:
                     'pkt_payload': None,
                 }
 
+            # Emit SocketIO event so sender's UI updates immediately
+            if self.socketio:
+                self.socketio.emit('new_message', {
+                    'type': 'channel',
+                    'channel_idx': channel_idx,
+                    'sender': self.device_name,
+                    'content': text,
+                    'timestamp': ts,
+                    'is_own': True,
+                    'id': msg_id,
+                }, namespace='/chat')
+
             return {'success': True, 'message': 'Message sent', 'id': msg_id}
 
         except Exception as e:
