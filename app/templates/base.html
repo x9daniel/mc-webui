@@ -417,6 +417,21 @@
                         <button class="btn btn-primary" type="button" id="searchBtn">
                             <i class="bi bi-search"></i>
                         </button>
+                        <button class="btn btn-outline-secondary" type="button" id="searchHelpBtn" title="Search syntax help">
+                            <i class="bi bi-question-circle"></i>
+                        </button>
+                    </div>
+                    <div id="searchHelp" class="alert alert-light small mb-3" style="display:none;">
+                        <strong>Search tips:</strong>
+                        <ul class="mb-1 ps-3">
+                            <li><code>hello world</code> — messages containing both words</li>
+                            <li><code>"hello world"</code> — exact phrase</li>
+                            <li><code>hello OR world</code> — either word</li>
+                            <li><code>hello NOT world</code> — hello but not world</li>
+                            <li><code>hell*</code> — prefix match (hello,hellas...)</li>
+                        </ul>
+                        <div class="text-muted">Special characters (<code>. , - :</code>) should be wrapped in quotes.<br>
+                        <a href="https://www.sqlite.org/fts5.html#full_text_query_syntax" target="_blank" rel="noopener">Full FTS5 syntax reference <i class="bi bi-box-arrow-up-right"></i></a></div>
                     </div>
                     <div id="searchResults">
                         <div class="text-center text-muted py-4">

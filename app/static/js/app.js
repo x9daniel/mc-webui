@@ -3777,6 +3777,15 @@ function initializeSearch() {
     const btn = document.getElementById('searchBtn');
     if (!input || !btn) return;
 
+    // Toggle search help
+    const helpBtn = document.getElementById('searchHelpBtn');
+    const helpPanel = document.getElementById('searchHelp');
+    if (helpBtn && helpPanel) {
+        helpBtn.addEventListener('click', () => {
+            helpPanel.style.display = helpPanel.style.display === 'none' ? '' : 'none';
+        });
+    }
+
     // Search on Enter or button click
     btn.addEventListener('click', () => performSearch(input.value));
     input.addEventListener('keydown', (e) => {
@@ -3842,7 +3851,7 @@ async function performSearch(query) {
                 item.innerHTML = `
                     <div class="d-flex justify-content-between align-items-start">
                         <div>
-                            <span class="badge bg-primary me-1">#${escapeHtml(r.channel_name || '')}</span>
+                            <span class="badge bg-primary me-1">${escapeHtml(r.channel_name || '')}</span>
                             <strong class="small">${r.is_own ? 'You' : escapeHtml(r.sender || '')}</strong>
                         </div>
                         <small class="text-muted">${time}</small>
